@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jelly Chain</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=M+PLUS+Rounded+1c:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            overflow: hidden;
+            font-family: 'Fredoka One', 'M PLUS Rounded 1c', sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
+        /* ぷにぷにボタンのスタイル */
+        .btn-jelly {
+            background: linear-gradient(to bottom, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+            border: none;
+            border-radius: 50px;
+            color: #d81b60;
+            font-size: 1.2rem;
+            font-weight: bold;
+            box-shadow: 0 6px 0 #f06292, 0 10px 15px rgba(0,0,0,0.2);
+            transition: all 0.1s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-jelly:active {
+            transform: translateY(6px);
+            box-shadow: 0 0px 0 #f06292, 0 4px 5px rgba(0,0,0,0.2);
+        }
+
+        /* 方向キー等のレイアウト */
+        #controls {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .d-pad, .action-pad {
+            display: grid;
+            gap: 5px;
+        }
+        .d-pad {
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            width: 160px;
+        }
+        .action-pad {
+            grid-template-columns: repeat(2, 1fr);
+            align-items: end;
+            width: 110px;
+        }
+        
+        .d-pad button, .action-pad button {
+            height: 50px;
+        }
+
+        /* グリッド配置指定 */
+        #btnLeft { grid-column: 1; grid-row: 2; }
+        #btnDown { grid-column: 2; grid-row: 2; }
+        #btnRight { grid-column: 3; grid-row: 2; }
+
+        /* テキストエフェクト */
+        .text-outline {
+            color: white;
+            text-shadow: 
+                -2px -2px 0 #ff4081,  
+                 2px -2px 0 #ff4081,
+                -2px  2px 0 #ff4081,
+                 2px  2px 0 #ff4081,
+                 0px  4px 10px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        
+        <!-- ヘッダーUI -->
+        <div class="w-full max-w-sm flex justify-between items-end mb-2 px-4 z-10">
+            <div>
+                <div class="text-white font-bold text-sm tracking-widest drop-shadow-md">SCORE</div>
+                <div id="scoreDisplay" class="text-3xl text-outline font-black">0</div>
+            </div>
+            <div class="text-right">
+                <div class="text-white font-bold text-sm tracking-widest drop-shadow-md">NEXT</div>
+                <!-- 次のゼリーを表示するミニキャンバス -->
+                <canvas id="nextCanvas" width="60" height="120" class="bg-transparent shadow-none border-none"></canvas>
+            </div>
+        </div>
+
+        <!-- メインゲーム画面 -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- スマホ向けコントローラー -->
+        <div id="controls" class="z-10">
+            <div class="d-pad">
+                <button id="btnLeft" class="btn-jelly">◀</button>
+                <button id="btnDown" class="btn-jelly">▼</button>
+                <button id="btnRight" class="btn-jelly">▶</button>
+            </div>
+            <div class="action-pad">
+                <button id="btnRotL" class="btn-jelly text-sm">↺</button>
+                <button id="btnRotR" class="btn-jelly text-sm">↻</button>
+            </div>
+        </div>
+
+        <!-- メニュー画面オーバーレイ -->
+        <div id="menuScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm z-20 transition-opacity duration-300">
+            <h1 class="text-6xl text-outline mb-8 tracking-widest transform -rotate-2">Jelly Chain</h1>
+            <button id="startBtn" class="btn-jelly px-12 py-4 text-2xl">PLAY</button>
+        </div>
+
+        <!-- ゲームオーバー画面オーバーレイ -->
+        <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md z-20 hidden transition-opacity duration-300">
+            <h2 class="text-5xl text-outline mb-4 tracking-widest">GAME OVER</h2>
+            <p class="text-white text-2xl mb-8 font-bold drop-shadow-lg">SCORE: <span id="finalScore">0</span></p>
+            <button id="restartBtn" class="btn-jelly px-12 py-4 text-2xl">RETRY</button>
+        </div>
+
+    </div>
+
+    <script>
+        // -----------------------------------------------------------
+        // システム定数・変数設定
+        // -----------------------------------------------------------
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const nextCanvas = document.getElementById('nextCanvas');
+        const nextCtx = nextCanvas.getContext('2d');
+        
+        const COLS = 6;
+        const ROWS = 13; // 0行目は見えないバッファ領域とする
+        const VISIBLE_ROWS = 12;
+        
+        let TILE_SIZE = 0;
+        let BOARD_WIDTH = 0;
+        let BOARD_HEIGHT = 0;
+        let OFFS_X = 0;
+        let OFFS_Y = 0;
+
+        // カラー定義 (1:赤, 2:緑, 3:青, 4:黄, 5:紫)
+        const COLORS = [
+            null,
+            { main: '#ff4d4d', dark: '#cc0000', light: '#ffb3b3' }, // 赤
+            { main: '#4dff4d', dark: '#00cc00', light: '#b3ffb3' }, // 緑
+            { main: '#4d4dff', dark: '#0000cc', light: '#b3b3ff' }, // 青
+            { main: '#ffff4d', dark: '#cccc00', light: '#ffffb3' }, // 黄
+            { main: '#d24dff', dark: '#9900cc', light: '#f0b3ff' }  // 紫
+        ];
+
+        let board = [];
+        // アニメーション用の描画オフセットやスケールを保持する配列
+        let animBoard = []; 
+
+        let state = 'MENU'; // MENU, PLAYING, LOCK_DELAY, CLEARING, FALLING, GAMEOVER
+        
+        let score = 0;
+        let chainCount = 0; // 連鎖数
+
+        // 浮遊中のペア
+        let currentPiece = null;
+        let nextPieceColors = [1, 1];
+
+        // ループ制御用
+        let lastTime = 0;
+        let dropCounter = 0;
+        let dropInterval = 800; // 初期落下速度(ミリ秒)
+
+        // エフェクト用
+        let particles = [];
+        let floatingTexts = [];
+
+        // -----------------------------------------------------------
+        // リサイズと初期化
+        // -----------------------------------------------------------
+        function resize() {
+            // スマホやPCの画面サイズに合わせてキャンバスをリサイズ
+            const container = document.getElementById('game-container');
+            const availableHeight = window.innerHeight - 150; // ヘッダーとコントローラーの分を引く
+            const availableWidth = window.innerWidth - 20;
+
+            // 縦横比 6 : 12
+            let sizeByHeight = availableHeight / VISIBLE_ROWS;
+            let sizeByWidth = availableWidth / COLS;
+            
+            TILE_SIZE = Math.floor(Math.min(sizeByHeight, sizeByWidth, 40)); // 最大40pxに制限
+            
+            BOARD_WIDTH = TILE_SIZE * COLS;
+            BOARD_HEIGHT = TILE_SIZE * VISIBLE_ROWS;
+
+            canvas.width = BOARD_WIDTH;
+            canvas.height = BOARD_HEIGHT;
+
+            drawAll();
+        }
+        window.addEventListener('resize', resize);
+        
+        function initBoard() {
+            board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+            animBoard = Array.from({length: ROWS}, () => Array(COLS).fill(null).map(() => ({ x: 0, y: 0, scale: 1, alpha: 1 })));
+        }
+
+        // -----------------------------------------------------------
+        // クラス定義
+        // -----------------------------------------------------------
+        class Piece {
+            constructor(color1, color2) {
+                this.x = 2; // COLS/2 - 1
+                this.y = 0; // 最上段
+                this.colors = [color1, color2]; // [軸, 回転する方]
+                this.rotation = 0; // 0:上, 1:右, 2:下, 3:左
+            }
+
+            // 回転する方の座標を取得
+            getSubPos() {
+                let sx = this.x;
+                let sy = this.y;
+                if (this.rotation === 0) sy -= 1;
+                else if (this.rotation === 1) sx += 1;
+                else if (this.rotation === 2) sy += 1;
+                else if (this.rotation === 3) sx -= 1;
+                return { x: sx, y: sy };
+            }
+
+            isValid(nx, ny, nRot) {
+                let sx = nx;
+                let sy = ny;
+                if (nRot === 0) sy -= 1;
+                else if (nRot === 1) sx += 1;
+                else if (nRot === 2) sy += 1;
+                else if (nRot === 3) sx -= 1;
+
+                // 範囲外チェック
+                if (nx < 0 || nx >= COLS || ny >= ROWS || ny < 0) return false;
+                if (sx < 0 || sx >= COLS || sy >= ROWS || sy < 0) return false;
+                
+                // ブロック衝突チェック
+                if (board[ny][nx] !== 0) return false;
+                if (board[sy][sx] !== 0) return false;
+
+                return true;
+            }
+
+            move(dx, dy) {
+                if (this.isValid(this.x + dx, this.y + dy, this.rotation)) {
+                    this.x += dx;
+                    this.y += dy;
+                    return true;
+                }
+                return false;
+            }
+
+            rotate(dir) {
+                // dir: 1 (右回り), -1 (左回り)
+                let nRot = (this.rotation + dir + 4) % 4;
+                
+                // 通常の回転チェック
+                if (this.isValid(this.x, this.y, nRot)) {
+                    this.rotation = nRot;
+                    return;
+                }
+                // 壁蹴り (Wall Kick) - 軸をずらして回転可能か試す
+                if (this.isValid(this.x - 1, this.y, nRot)) { // 左にずらす
+                    this.x -= 1;
+                    this.rotation = nRot;
+                    return;
+                }
+                if (this.isValid(this.x + 1, this.y, nRot)) { // 右にずらす
+                    this.x += 1;
+                    this.rotation = nRot;
+                    return;
+                }
+                if (this.isValid(this.x, this.y - 1, nRot)) { // 上にずらす
+                    this.y -= 1;
+                    this.rotation = nRot;
+                    return;
+                }
+            }
+
+            lock() {
+                board[this.y][this.x] = this.colors[0];
+                let sub = this.getSubPos();
+                board[sub.y][sub.x] = this.colors[1];
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.05 + 0.02;
+                this.size = Math.random() * 6 + 3;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.2; // 重力
+                this.life -= this.decay;
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color.light;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class FloatingText {
+            constructor(text, x, y, color, size) {
+                this.text = text;
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = size;
+                this.life = 1.0;
+                this.vy = -1.5;
+            }
+            update() {
+                this.y += this.vy;
+                this.life -= 0.02;
+            }
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.font = `900 ${this.size}px 'Fredoka One'`;
+                ctx.textAlign = 'center';
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 4;
+                ctx.strokeText(this.text, this.x, this.y);
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        // -----------------------------------------------------------
+        // ゲームロジック
+        // -----------------------------------------------------------
+        
+        function getRandomColor() {
+            return Math.floor(Math.random() * 5) + 1;
+        }
+
+        function spawnPiece() {
+            currentPiece = new Piece(nextPieceColors[0], nextPieceColors[1]);
+            nextPieceColors = [getRandomColor(), getRandomColor()];
+            drawNext();
+
+            // 出現位置が埋まっていたらゲームオーバー
+            if (!currentPiece.isValid(currentPiece.x, currentPiece.y, currentPiece.rotation)) {
+                state = 'GAMEOVER';
+                document.getElementById('gameOverScreen').classList.remove('hidden');
+                document.getElementById('finalScore').innerText = score;
+            } else {
+                state = 'PLAYING';
+            }
+        }
+
+        // 連結判定 (DFS)
+        function findMatches() {
+            let visited = Array.from({length: ROWS}, () => Array(COLS).fill(false));
+            let matches = [];
+            
+            for(let r = 0; r < ROWS; r++){
+                for(let c = 0; c < COLS; c++){
+                    if(board[r][c] !== 0 && !visited[r][c]) {
+                        let group = [];
+                        let color = board[r][c];
+                        let q = [{r, c}];
+                        visited[r][c] = true;
+                        
+                        let head = 0;
+                        while(head < q.length) {
+                            let curr = q[head++];
+                            group.push(curr);
+                            
+                            // 上下左右
+                            let dirs = [[-1,0], [1,0], [0,-1], [0,1]];
+                            for(let d of dirs) {
+                                let nr = curr.r + d[0];
+                                let nc = curr.c + d[1];
+                                if(nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !visited[nr][nc] && board[nr][nc] === color) {
+                                    visited[nr][nc] = true;
+                                    q.push({r: nr, c: nc});
+                                }
+                            }
+                        }
+                        
+                        if(group.length >= 4) {
+                            matches.push(group);
+                        }
+                    }
+                }
+            }
+            return matches;
+        }
+
+        function handleMatches(matches) {
+            if (matches.length > 0) {
+                state = 'CLEARING';
+                chainCount++;
+                
+                let clearPoints = 0;
+                let clearedCount = 0;
+
+                matches.forEach(group => {
+                    clearedCount += group.length;
+                    group.forEach(cell => {
+                        let colorDef = COLORS[board[cell.r][cell.c]];
+                        board[cell.r][cell.c] = 0; // 消去
+                        
+                        // エフェクト設定
+                        animBoard[cell.r][cell.c].scale = 1;
+                        
+                        // パーティクル発生
+                        let px = cell.c * TILE_SIZE + TILE_SIZE/2;
+                        let py = (cell.r - 1) * TILE_SIZE + TILE_SIZE/2; // -1 は見えない0行目のオフセット
+                        for(let i=0; i<8; i++) {
+                            particles.push(new Particle(px, py, colorDef));
+                        }
+                    });
+                });
+
+                // スコア計算 (基本10点 × 個数 × 連鎖倍率)
+                clearPoints = clearedCount * 10 * chainCount;
+                score += clearPoints;
+                document.getElementById('scoreDisplay').innerText = score;
+
+                // 連鎖テキスト
+                if (chainCount > 1) {
+                    floatingTexts.push(new FloatingText(`${chainCount} CHAIN!`, BOARD_WIDTH/2, BOARD_HEIGHT/2, '#ff4081', 40));
+                }
+
+                // 少し待ってから重力処理へ
+                setTimeout(() => {
+                    applyGravity();
+                }, 400); // 消滅エフェクト時間
+
+            } else {
+                // 消えなかった場合、次のペアへ
+                chainCount = 0;
+                spawnPiece();
+            }
+        }
+
+        function applyGravity() {
+            state = 'FALLING';
+            let moved = false;
+            
+            // 下から順にスキャンして落とす
+            for (let c = 0; c < COLS; c++) {
+                let writeR = ROWS - 1;
+                for (let r = ROWS - 1; r >= 0; r--) {
+                    if (board[r][c] !== 0) {
+                        if (writeR !== r) {
+                            board[writeR][c] = board[r][c];
+                            board[r][c] = 0;
+                            // アニメーション用にYオフセットを設定（元の位置のピクセル差分）
+                            animBoard[writeR][c].y = -(writeR - r) * TILE_SIZE;
+                            moved = true;
+                        }
+                        writeR--;
+                    }
+                }
+            }
+
+            if (moved) {
+                // 落下アニメーションの完了を待ってから再度マッチチェック
+                setTimeout(() => {
+                    let matches = findMatches();
+                    handleMatches(matches);
+                }, 300); // 落下時間
+            } else {
+                let matches = findMatches();
+                handleMatches(matches);
+            }
+        }
+
+        // -----------------------------------------------------------
+        // 描画処理
+        // -----------------------------------------------------------
+        
+        function drawJelly(ctx, c, r, colorId, x, y, size, alpha = 1, scale = 1) {
+            if (colorId === 0 || !COLORS[colorId]) return;
+            let color = COLORS[colorId];
+
+            ctx.save();
+            ctx.translate(x + size/2, y + size/2);
+            ctx.scale(scale, scale);
+            ctx.globalAlpha = alpha;
+
+            // 連結判定による形の変形（リッチ表現）
+            let connectTop = (r > 0 && board[r-1][c] === colorId);
+            let connectBottom = (r < ROWS-1 && board[r+1][c] === colorId);
+            let connectLeft = (c > 0 && board[r][c-1] === colorId);
+            let connectRight = (c < COLS-1 && board[r][c+1] === colorId);
+
+            let rSize = size/2 - 2;
+
+            ctx.beginPath();
+            // ベースは角丸の四角や円だが、隣接している方向は角を無くして繋げる
+            ctx.fillStyle = color.main;
+            
+            // 簡易的に円を描き、繋がっている方向に矩形を描画して隙間を埋める
+            ctx.arc(0, 0, rSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (connectTop) ctx.fillRect(-rSize, -size/2, rSize*2, size/2);
+            if (connectBottom) ctx.fillRect(-rSize, 0, rSize*2, size/2);
+            if (connectLeft) ctx.fillRect(-size/2, -rSize, size/2, rSize*2);
+            if (connectRight) ctx.fillRect(0, -rSize, size/2, rSize*2);
+
+            // 立体感（ハイライトとシャドウ）- 繋がっていない時だけ綺麗に円形にかける
+            ctx.globalCompositeOperation = 'source-atop';
+            
+            let grd = ctx.createRadialGradient(-rSize*0.3, -rSize*0.3, 0, 0, 0, rSize);
+            grd.addColorStop(0, color.light);
+            grd.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grd;
+            ctx.fillRect(-size/2, -size/2, size, size);
+
+            let darkGrd = ctx.createLinearGradient(0, 0, 0, size/2);
+            darkGrd.addColorStop(0, 'rgba(0,0,0,0)');
+            darkGrd.addColorStop(1, color.dark);
+            ctx.fillStyle = darkGrd;
+            ctx.fillRect(-size/2, 0, size, size/2);
+
+            ctx.globalCompositeOperation = 'source-over';
+
+            // かわいい目玉を描画（少し上目遣い）
+            // 操作中のピースは下を向かせるなどしても良いが、今回は固定
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-rSize*0.3, -rSize*0.2, rSize*0.25, 0, Math.PI*2);
+            ctx.arc(rSize*0.3, -rSize*0.2, rSize*0.25, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(-rSize*0.3, -rSize*0.3, rSize*0.1, 0, Math.PI*2);
+            ctx.arc(rSize*0.3, -rSize*0.3, rSize*0.1, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawNext() {
+            nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+            let s = 30; // 次のぷよのサイズ
+            let ox = (nextCanvas.width - s) / 2;
+            let oy = 10;
+            
+            // 仮のboard情報を渡さないため、r, c, board判定はfalseとするダミー引数
+            // currentPieceの構造と同じく、軸が下、もう一つが上
+            drawJelly(nextCtx, -1, -1, nextPieceColors[1], ox, oy, s, 1, 1);
+            drawJelly(nextCtx, -1, -1, nextPieceColors[0], ox, oy + s, s, 1, 1);
+        }
+
+        function drawAll() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // グリッド背景（うっすら）
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            for(let c=0; c<=COLS; c++){
+                ctx.beginPath();
+                ctx.moveTo(c*TILE_SIZE, 0);
+                ctx.lineTo(c*TILE_SIZE, BOARD_HEIGHT);
+                ctx.stroke();
+            }
+            for(let r=0; r<=VISIBLE_ROWS; r++){
+                ctx.beginPath();
+                ctx.moveTo(0, r*TILE_SIZE);
+                ctx.lineTo(BOARD_WIDTH, r*TILE_SIZE);
+                ctx.stroke();
+            }
+
+            // ボード上のゼリー描画
+            for (let r = 1; r < ROWS; r++) { // r=0は見えないのでスキップ
+                for (let c = 0; c < COLS; c++) {
+                    let colorId = board[r][c];
+                    if (colorId !== 0) {
+                        let anim = animBoard[r][c];
+                        
+                        // アニメーション値の更新（イージング）
+                        anim.y += (0 - anim.y) * 0.2; // 落下アニメ
+                        
+                        let px = c * TILE_SIZE;
+                        let py = (r - 1) * TILE_SIZE + anim.y;
+
+                        // 消去時の縮小アニメ
+                        if (state === 'CLEARING') {
+                            // 簡易的に直接縮小させず、ここではそのまま描画。消去アニメはパーティクルで表現。
+                            // scaleアニメーションを入れるならここで anim.scale -= 0.1 等とする。
+                        }
+
+                        drawJelly(ctx, c, r, colorId, px, py, TILE_SIZE, anim.alpha, anim.scale);
+                    }
+                }
+            }
+
+            // 操作中のピース描画
+            if ((state === 'PLAYING' || state === 'LOCK_DELAY') && currentPiece) {
+                // 軸
+                let px1 = currentPiece.x * TILE_SIZE;
+                let py1 = (currentPiece.y - 1) * TILE_SIZE; // 表示上のY
+                if (currentPiece.y >= 1) { // 画面内に入ってから描画
+                    drawJelly(ctx, currentPiece.x, currentPiece.y, currentPiece.colors[0], px1, py1, TILE_SIZE);
+                }
+
+                // サブ
+                let sub = currentPiece.getSubPos();
+                let px2 = sub.x * TILE_SIZE;
+                let py2 = (sub.y - 1) * TILE_SIZE;
+                if (sub.y >= 1) {
+                    drawJelly(ctx, sub.x, sub.y, currentPiece.colors[1], px2, py2, TILE_SIZE);
+                }
+            }
+
+            // パーティクルの描画
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.update();
+                p.draw(ctx);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // テキストの描画
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                let ft = floatingTexts[i];
+                ft.update();
+                ft.draw(ctx);
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+        }
+
+        // -----------------------------------------------------------
+        // メインループ
+        // -----------------------------------------------------------
+        function update(time) {
+            let deltaTime = time - lastTime;
+            lastTime = time;
+
+            if (state === 'PLAYING') {
+                dropCounter += deltaTime;
+                // 下キー押下時は高速落下
+                let currentDropInterval = isDownPressed ? 50 : dropInterval;
+
+                if (dropCounter > currentDropInterval) {
+                    if (currentPiece.move(0, 1)) {
+                        // 落下成功
+                        dropCounter = 0;
+                    } else {
+                        // 接地した
+                        state = 'LOCK_DELAY';
+                        dropCounter = 0;
+                    }
+                }
+            } else if (state === 'LOCK_DELAY') {
+                dropCounter += deltaTime;
+                // 接地後、少しの間は左右移動や回転ができる猶予時間 (500ms)
+                if (dropCounter > 500 || (isDownPressed && dropCounter > 100)) {
+                    // 猶予終了、または下キー強制ロック
+                    currentPiece.lock();
+                    currentPiece = null;
+                    let matches = findMatches();
+                    handleMatches(matches);
+                } else {
+                    // 猶予時間中に再度落下できる状態になればPLAYINGに戻す
+                    if (currentPiece.isValid(currentPiece.x, currentPiece.y + 1, currentPiece.rotation)) {
+                        state = 'PLAYING';
+                        dropCounter = 0;
+                    }
+                }
+            }
+
+            drawAll();
+            requestAnimationFrame(update);
+        }
+
+        // -----------------------------------------------------------
+        // 入力制御
+        // -----------------------------------------------------------
+        let isDownPressed = false;
+
+        function handleInput(action) {
+            if (state !== 'PLAYING' && state !== 'LOCK_DELAY') return;
+
+            switch(action) {
+                case 'LEFT':
+                    currentPiece.move(-1, 0);
+                    break;
+                case 'RIGHT':
+                    currentPiece.move(1, 0);
+                    break;
+                case 'DOWN_START':
+                    isDownPressed = true;
+                    break;
+                case 'DOWN_END':
+                    isDownPressed = false;
+                    break;
+                case 'ROT_L':
+                    currentPiece.rotate(-1);
+                    break;
+                case 'ROT_R':
+                    currentPiece.rotate(1);
+                    break;
+            }
+        }
+
+        // キーボード
+        document.addEventListener('keydown', (e) => {
+            if(e.key === 'ArrowLeft') handleInput('LEFT');
+            if(e.key === 'ArrowRight') handleInput('RIGHT');
+            if(e.key === 'ArrowDown') handleInput('DOWN_START');
+            if(e.key === 'z' || e.key === 'Z') handleInput('ROT_L');
+            if(e.key === 'x' || e.key === 'X' || e.key === 'ArrowUp') handleInput('ROT_R');
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.key === 'ArrowDown') handleInput('DOWN_END');
+        });
+
+        // オンスクリーンボタン (タッチ＆マウス対応)
+        const bindBtn = (id, action) => {
+            const btn = document.getElementById(id);
+            if(!btn) return;
+            const trigger = (e) => { e.preventDefault(); handleInput(action); };
+            
+            if(action === 'DOWN_START') {
+                btn.addEventListener('touchstart', trigger, {passive: false});
+                btn.addEventListener('mousedown', trigger);
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); handleInput('DOWN_END'); });
+                btn.addEventListener('mouseup', () => handleInput('DOWN_END'));
+                btn.addEventListener('mouseleave', () => handleInput('DOWN_END'));
+            } else {
+                btn.addEventListener('touchstart', trigger, {passive: false});
+                btn.addEventListener('mousedown', trigger);
+            }
+        };
+
+        bindBtn('btnLeft', 'LEFT');
+        bindBtn('btnRight', 'RIGHT');
+        bindBtn('btnDown', 'DOWN_START');
+        bindBtn('btnRotL', 'ROT_L');
+        bindBtn('btnRotR', 'ROT_R');
+
+        // -----------------------------------------------------------
+        // 画面遷移・ゲーム開始
+        // -----------------------------------------------------------
+        function startGame() {
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            initBoard();
+            score = 0;
+            chainCount = 0;
+            dropInterval = 800;
+            document.getElementById('scoreDisplay').innerText = score;
+            
+            nextPieceColors = [getRandomColor(), getRandomColor()];
+            spawnPiece();
+            
+            lastTime = performance.now();
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startGame);
+        document.getElementById('restartBtn').addEventListener('click', startGame);
+
+        // 初期化処理
+        resize();
+        initBoard();
+        nextPieceColors = [getRandomColor(), getRandomColor()];
+        drawNext();
+        drawAll(); // メニュー画面の背景として描画しておく
+        requestAnimationFrame(update);
+
+    </script>
+</body>
+</html>
