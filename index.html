@@ -247,7 +247,7 @@
         class Piece {
             constructor(color1, color2) {
                 this.x = 2; // COLS/2 - 1
-                this.y = 0; // 最上段
+                this.y = 1; // 軸は最上段、子は0行目のバッファ領域
                 this.colors = [color1, color2]; // [軸, 回転する方]
                 this.rotation = 0; // 0:上, 1:右, 2:下, 3:左
             }
@@ -540,10 +540,11 @@
             ctx.globalAlpha = alpha;
 
             // 連結判定による形の変形（リッチ表現）
-            let connectTop = (r > 0 && board[r-1][c] === colorId);
-            let connectBottom = (r < ROWS-1 && board[r+1][c] === colorId);
-            let connectLeft = (c > 0 && board[r][c-1] === colorId);
-            let connectRight = (c < COLS-1 && board[r][c+1] === colorId);
+            const onBoard = r >= 0 && r < ROWS && c >= 0 && c < COLS;
+            let connectTop = (onBoard && r > 0 && board[r-1][c] === colorId);
+            let connectBottom = (onBoard && r < ROWS-1 && board[r+1][c] === colorId);
+            let connectLeft = (onBoard && c > 0 && board[r][c-1] === colorId);
+            let connectRight = (onBoard && c < COLS-1 && board[r][c+1] === colorId);
 
             let rSize = size/2 - 2;
 
@@ -804,6 +805,8 @@
             score = 0;
             chainCount = 0;
             dropInterval = 800;
+            dropCounter = 0;
+            isDownPressed = false;
             document.getElementById('scoreDisplay').innerText = score;
             
             nextPieceColors = [getRandomColor(), getRandomColor()];
@@ -816,8 +819,8 @@
         document.getElementById('restartBtn').addEventListener('click', startGame);
 
         // 初期化処理
-        resize();
         initBoard();
+        resize();
         nextPieceColors = [getRandomColor(), getRandomColor()];
         drawNext();
         drawAll(); // メニュー画面の背景として描画しておく
